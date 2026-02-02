@@ -1,12 +1,16 @@
-import { Ripgrep } from "../file/ripgrep"
+/**
+ * 系统提示词（system prompt）的组装与分发。
+ * 负责：按模型选择供应商专用提示、提供默认指令、注入运行环境信息。
+ * 被 llm.ts、prompt.ts、agent.ts 等调用。
+ */
 
+import { Ripgrep } from "../file/ripgrep"
 import { Instance } from "../project/instance"
 
 import PROMPT_ANTHROPIC from "./prompt/anthropic.txt"
 import PROMPT_ANTHROPIC_WITHOUT_TODO from "./prompt/qwen.txt"
 import PROMPT_BEAST from "./prompt/beast.txt"
 import PROMPT_GEMINI from "./prompt/gemini.txt"
-
 import PROMPT_CODEX from "./prompt/codex_header.txt"
 import type { Provider } from "@/provider/provider"
 
