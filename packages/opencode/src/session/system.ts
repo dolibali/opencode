@@ -15,10 +15,19 @@ import PROMPT_CODEX from "./prompt/codex_header.txt"
 import type { Provider } from "@/provider/provider"
 
 export namespace SystemPrompt {
+  /**
+   * 返回默认/通用系统指令（当前为 Codex 头部文案）。
+   * 用于 agent 配置的 instructions、以及 Codex 会话的 options.instructions。
+   */
   export function instructions() {
     return PROMPT_CODEX.trim()
   }
 
+  /**
+   * 根据模型 ID 选择对应的供应商专用系统提示，返回字符串数组（一段或多段）。
+   * 匹配顺序：gpt-5 → Codex；gpt-/o1/o3 → Beast；gemini- → Gemini；claude → Anthropic；其余 → 通用兜底。
+   * 非 Codex 会话在 llm 中会拼进 system 消息；Codex 会话不调用此函数（指令走 options.instructions）。
+   */
   export function provider(model: Provider.Model) {
     if (model.api.id.includes("gpt-5")) return [PROMPT_CODEX]
     if (model.api.id.includes("gpt-") || model.api.id.includes("o1") || model.api.id.includes("o3"))
@@ -28,6 +37,11 @@ export namespace SystemPrompt {
     return [PROMPT_ANTHROPIC_WITHOUT_TODO]
   }
 
+  /**
+   * 生成运行环境说明段落：模型信息、工作目录、是否 Git、平台、日期。
+   * <files> 内预留了文件树逻辑（当前 project.vcs === "git" && false 恒为 false，不输出树）。
+   * 在 prompt.ts 中与 InstructionPrompt.system() 一起拼入 system 数组。
+   */
   export async function environment(model: Provider.Model) {
     const project = Instance.project
     return [
