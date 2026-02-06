@@ -21,6 +21,7 @@ a.out
 target
 .scripts
 .direnv/
+.cursor/
 
 # Local dev files
 opencode-dev

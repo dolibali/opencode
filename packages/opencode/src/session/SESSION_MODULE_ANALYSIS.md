@@ -16,34 +16,34 @@ Session 系统是 OpenCode 里**会话生命周期与消息流转**的统一定�
 
 ```mermaid
 flowchart TB
-  subgraph 入口与调度
-    A[SessionPrompt.prompt]
-    B[SessionPrompt.loop]
+  subgraph 入口与调度["入口与调度 prompt.ts"]
+    A["SessionPrompt.prompt<br/>prompt.ts L130-270"]
+    B["SessionPrompt.loop<br/>prompt.ts L280-500"]
   end
 
-  subgraph 会话与消息存储
-    S[Session namespace]
-    M[MessageV2]
-    Storage[(Storage)]
+  subgraph 会话与消息存储["会话与消息存储"]
+    S["Session namespace<br/>index.ts L50-520"]
+    M["MessageV2<br/>message-v2.ts L1-750"]
+    Storage[("Storage<br/>storage/storage.ts")]
   end
 
-  subgraph 提示与模型
-    Sys[SystemPrompt]
-    Inst[InstructionPrompt]
-    LLM[LLM.stream]
+  subgraph 提示与模型["提示与模型"]
+    Sys["SystemPrompt<br/>system.ts L1-120"]
+    Inst["InstructionPrompt<br/>instruction.ts L1-200"]
+    LLM["LLM.stream<br/>llm.ts L47-180"]
   end
 
-  subgraph 流式处理
-    Proc[SessionProcessor]
-    Status[SessionStatus]
-    Retry[SessionRetry]
+  subgraph 流式处理["流式处理"]
+    Proc["SessionProcessor<br/>processor.ts L45-350"]
+    Status["SessionStatus<br/>status.ts L7-75"]
+    Retry["SessionRetry<br/>retry.ts L1-80"]
   end
 
-  subgraph 会话能力
-    Comp[SessionCompaction]
-    Sum[SessionSummary]
-    Rev[SessionRevert]
-    Todo[Todo]
+  subgraph 会话能力["会话能力"]
+    Comp["SessionCompaction<br/>compaction.ts L1-300"]
+    Sum["SessionSummary<br/>summary.ts L1-150"]
+    Rev["SessionRevert<br/>revert.ts L1-180"]
+    Todo["Todo<br/>todo.ts L1-80"]
   end
 
   A --> B
@@ -282,35 +282,35 @@ export const Info = z.union([
 ```mermaid
 sequenceDiagram
   participant Client
-  participant SessionPrompt
-  participant Session
-  participant MessageV2
-  participant SessionProcessor
-  participant LLM
-  participant Storage
+  participant SessionPrompt as SessionPrompt<br/>(prompt.ts)
+  participant Session as Session<br/>(index.ts)
+  participant MessageV2 as MessageV2<br/>(message-v2.ts)
+  participant SessionProcessor as SessionProcessor<br/>(processor.ts)
+  participant LLM as LLM<br/>(llm.ts)
+  participant Storage as Storage<br/>(storage.ts)
 
-  Client->>SessionPrompt: prompt({ sessionID, parts, agent, model, ... })
-  SessionPrompt->>Session: get(sessionID)
-  SessionPrompt->>Session: SessionRevert.cleanup(session)
-  SessionPrompt->>SessionPrompt: createUserMessage(input)
-  SessionPrompt->>Session: updateMessage(info), updatePart(parts)
-  SessionPrompt->>SessionPrompt: loop(sessionID)
+  Client->>SessionPrompt: prompt() [L130-270]
+  SessionPrompt->>Session: get(sessionID) [index.ts L180]
+  SessionPrompt->>Session: SessionRevert.cleanup [revert.ts L95-120]
+  SessionPrompt->>SessionPrompt: createUserMessage [L450-600]
+  SessionPrompt->>Session: updateMessage/updatePart [index.ts L320-400]
+  SessionPrompt->>SessionPrompt: loop(sessionID) [L280-500]
 
-  loop loop 内
-    SessionPrompt->>MessageV2: filterCompacted(stream(sessionID))
-    SessionPrompt->>SessionProcessor: create({ assistantMessage, sessionID, model, abort })
-    SessionPrompt->>SessionProcessor: process(streamInput)
-    SessionProcessor->>LLM: stream(streamInput)
-    LLM->>LLM: 拼 system、resolveTools、streamText(...)
-    loop fullStream
-      LLM-->>SessionProcessor: reasoning/text/tool-call/tool-result/finish-step/...
-      SessionProcessor->>Session: updatePart(part) / updateMessage(assistantMessage)
+  loop loop 内 [prompt.ts L280-500]
+    SessionPrompt->>MessageV2: filterCompacted [message-v2.ts L580-620]
+    SessionPrompt->>SessionProcessor: create() [processor.ts L45-80]
+    SessionPrompt->>SessionProcessor: process(streamInput) [processor.ts L80-350]
+    SessionProcessor->>LLM: stream(streamInput) [llm.ts L47-180]
+    LLM->>LLM: 拼system、resolveTools、streamText
+    loop fullStream [processor.ts L100-300]
+      LLM-->>SessionProcessor: reasoning/text/tool-call/tool-result...
+      SessionProcessor->>Session: updatePart [index.ts L380-420]
       Session->>Storage: write part/message
     end
-    SessionProcessor-->>SessionPrompt: "continue" | "stop" | "compact"
+    SessionProcessor-->>SessionPrompt: "continue"|"stop"|"compact"
   end
 
-  SessionPrompt->>MessageV2: stream(sessionID) 取最后 assistant
+  SessionPrompt->>MessageV2: stream() 取最后assistant [message-v2.ts L500-550]
   SessionPrompt-->>Client: MessageV2.WithParts
 ```
 
@@ -324,20 +324,20 @@ sequenceDiagram
 
 ```mermaid
 sequenceDiagram
-  participant LLM
-  participant SessionProcessor
-  participant Session
-  participant Tool
-  participant PermissionNext
+  participant LLM as LLM<br/>(llm.ts)
+  participant SessionProcessor as SessionProcessor<br/>(processor.ts)
+  participant Session as Session<br/>(index.ts)
+  participant Tool as Tool<br/>(tool/*.ts)
+  participant PermissionNext as PermissionNext<br/>(permission/next.ts)
 
-  LLM-->>SessionProcessor: fullStream: tool-call
-  SessionProcessor->>Session: updatePart(ToolPart state: running)
-  SessionProcessor->>PermissionNext: doom_loop? ask(...)
+  LLM-->>SessionProcessor: fullStream: tool-call [processor.ts L150-180]
+  SessionProcessor->>Session: updatePart(state:running) [index.ts L380-420]
+  SessionProcessor->>PermissionNext: doom_loop检查 [processor.ts L180-200]
 
-  LLM->>Tool: execute(args)  (由 AI SDK 调用)
+  LLM->>Tool: execute(args) [AI SDK内部调用]
   Tool-->>LLM: result
-  LLM-->>SessionProcessor: fullStream: tool-result
-  SessionProcessor->>Session: updatePart(ToolPart state: completed, output, attachments)
+  LLM-->>SessionProcessor: fullStream: tool-result [processor.ts L200-250]
+  SessionProcessor->>Session: updatePart(state:completed) [index.ts L380-420]
 ```
 
 **说明**：  
@@ -348,23 +348,23 @@ sequenceDiagram
 
 ```mermaid
 sequenceDiagram
-  participant SessionPrompt
-  participant SessionProcessor
-  participant SessionCompaction
-  participant Session
-  participant MessageV2
+  participant SessionPrompt as SessionPrompt<br/>(prompt.ts)
+  participant SessionProcessor as SessionProcessor<br/>(processor.ts)
+  participant SessionCompaction as SessionCompaction<br/>(compaction.ts)
+  participant Session as Session<br/>(index.ts)
+  participant MessageV2 as MessageV2<br/>(message-v2.ts)
 
-  SessionProcessor-->>SessionPrompt: "compact"
-  SessionPrompt->>SessionCompaction: create({ sessionID, agent, model, auto: true })
-  SessionCompaction->>Session: updateMessage(用户消息) + updatePart(CompactionPart)
-  SessionPrompt->>SessionPrompt: loop 下一轮
+  SessionProcessor-->>SessionPrompt: "compact" [processor.ts L280-300]
+  SessionPrompt->>SessionCompaction: create() [compaction.ts L50-80]
+  SessionCompaction->>Session: updateMessage+updatePart [compaction.ts L80-120]
+  SessionPrompt->>SessionPrompt: loop下一轮 [prompt.ts L350-400]
 
-  Note over SessionPrompt,MessageV2: 下一轮 loop 中
-  SessionPrompt->>MessageV2: filterCompacted(stream(...))
-  SessionPrompt->>SessionPrompt: 发现 task.type === "compaction"
-  SessionPrompt->>SessionCompaction: process({ messages, parentID, abort, sessionID, auto })
-  SessionCompaction->>SessionCompaction: 总结旧消息、写新 user/assistant、删旧消息
-  SessionCompaction-->>SessionPrompt: "stop" | 继续
+  Note over SessionPrompt,MessageV2: 下一轮 loop 中 [prompt.ts L360-450]
+  SessionPrompt->>MessageV2: filterCompacted [message-v2.ts L580-620]
+  SessionPrompt->>SessionPrompt: 检测task.type==="compaction"
+  SessionPrompt->>SessionCompaction: process() [compaction.ts L120-250]
+  SessionCompaction->>SessionCompaction: 总结旧消息、写新消息、删旧消息 [L150-250]
+  SessionCompaction-->>SessionPrompt: "stop"|继续
 ```
 
 **说明**：  
@@ -377,25 +377,26 @@ sequenceDiagram
 ```mermaid
 sequenceDiagram
   participant Client
-  participant SessionRevert
-  participant Session
-  participant Snapshot
-  participant Storage
+  participant SessionRevert as SessionRevert<br/>(revert.ts)
+  participant Session as Session<br/>(index.ts)
+  participant Snapshot as Snapshot<br/>(snapshot/index.ts)
+  participant Storage as Storage<br/>(storage.ts)
+  participant SessionSummary as SessionSummary<br/>(summary.ts)
 
-  Client->>SessionRevert: revert({ sessionID, messageID, partID? })
-  SessionRevert->>SessionPrompt: assertNotBusy(sessionID)
-  SessionRevert->>Session: messages(sessionID)
-  SessionRevert->>SessionRevert: 计算 revert 点与 patches
-  SessionRevert->>Snapshot: revert(patches)
-  SessionRevert->>SessionSummary: computeDiff(rangeMessages)
-  SessionRevert->>Storage: write(["session_diff", sessionID], diffs)
-  SessionRevert->>Session: update(..., draft.revert = revert, draft.summary = ...)
+  Client->>SessionRevert: revert() [revert.ts L30-90]
+  SessionRevert->>SessionPrompt: assertNotBusy [prompt.ts L75-80]
+  SessionRevert->>Session: messages() [index.ts L250-280]
+  SessionRevert->>SessionRevert: 计算revert点与patches [revert.ts L60-90]
+  SessionRevert->>Snapshot: revert(patches) [snapshot/index.ts]
+  SessionRevert->>SessionSummary: computeDiff() [summary.ts L80-120]
+  SessionRevert->>Storage: write(session_diff)
+  SessionRevert->>Session: update(revert,summary) [index.ts L200-230]
   SessionRevert-->>Client: session
 
-  Note over Client,Storage: 下次 prompt 前
-  SessionPrompt->>Session: get(sessionID)
-  SessionPrompt->>SessionRevert: cleanup(session)
-  SessionRevert->>Session: update(..., draft.revert = undefined)
+  Note over Client,Storage: 下次prompt前 [prompt.ts L135-150]
+  SessionPrompt->>Session: get(sessionID) [index.ts L180]
+  SessionPrompt->>SessionRevert: cleanup(session) [revert.ts L95-120]
+  SessionRevert->>Session: update(revert=undefined) [index.ts L200-230]
 ```
 
 **说明**：  
@@ -425,23 +426,29 @@ sequenceDiagram
 
 ```mermaid
 flowchart LR
-  subgraph session
-    index
-    prompt
-    processor
-    llm
-    message-v2
-    system
-    instruction
-    compaction
-    summary
-    status
-    retry
-    revert
-    todo
+  subgraph session["session/ 目录"]
+    index["index.ts<br/>Session CRUD L50-520"]
+    prompt["prompt.ts<br/>prompt/loop L130-500"]
+    processor["processor.ts<br/>fullStream处理 L45-350"]
+    llm["llm.ts<br/>LLM.stream L47-180"]
+    msg["message-v2.ts<br/>User/Assistant/Part L1-750"]
+    system["system.ts<br/>供应商系统提示 L1-120"]
+    instruction["instruction.ts<br/>项目指令 L1-200"]
+    compaction["compaction.ts<br/>会话压缩 L1-300"]
+    summary["summary.ts<br/>总结与diff L1-150"]
+    status["status.ts<br/>会话状态 L7-75"]
+    retry["retry.ts<br/>重试策略 L1-80"]
+    revert["revert.ts<br/>回滚 L1-180"]
+    todo["todo.ts<br/>会话Todo L1-80"]
   end
 
-  index --> message-v2
+  subgraph external["外部依赖"]
+    storage["storage/storage.ts"]
+    agent["agent/agent.ts"]
+    provider["provider/provider.ts"]
+  end
+
+  index --> msg
   index --> storage
   prompt --> index
   prompt --> processor
@@ -452,16 +459,16 @@ flowchart LR
   prompt --> summary
   processor --> llm
   processor --> index
-  processor --> message-v2
+  processor --> msg
   processor --> status
   processor --> retry
   llm --> system
   llm --> agent
   llm --> provider
   compaction --> index
-  compaction --> message-v2
+  compaction --> msg
   revert --> index
-  revert --> message-v2
+  revert --> msg
   revert --> summary
 ```
 
